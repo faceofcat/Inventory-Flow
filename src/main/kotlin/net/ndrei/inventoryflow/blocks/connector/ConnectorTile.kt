@@ -11,6 +11,7 @@ import net.minecraft.util.EnumFacing
 import net.minecraft.util.EnumHand
 import net.minecraftforge.common.model.TRSRTransformation
 import net.ndrei.inventoryflow.connectors.ConnectorBlockPart
+import net.ndrei.inventoryflow.connectors.FluidConnector
 import net.ndrei.inventoryflow.connectors.IFlowConnectorPart
 import net.ndrei.teslacorelib.blocks.multipart.BlockPartHitBox
 import net.ndrei.teslacorelib.blocks.multipart.IBlockPart
@@ -30,23 +31,9 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
 
         val padding = 8.0
         val size = 3.0
-        fun EnumFacing.getAxisCoords(axis: EnumFacing.Axis) =
-            when(this.axis) {
-                axis -> when(this.axisDirection) {
-                    EnumFacing.AxisDirection.NEGATIVE -> 0.0 to size
-                    EnumFacing.AxisDirection.POSITIVE -> (32.0 - size) to size
-                }
-                else -> padding to (32.0 - padding * 2.0)
-            }
 
         EnumFacing.VALUES.forEach { facing ->
-            val (x, width) = facing.getAxisCoords(EnumFacing.Axis.X)
-            val (y, height) = facing.getAxisCoords(EnumFacing.Axis.Y)
-            val (z, depth) = facing.getAxisCoords(EnumFacing.Axis.Z)
-
-            val piece = ConnectorPiece(BlockPartHitBox
-                .big32Sized(x, y, z, width, height, depth)
-                .aabb)
+            val piece = ConnectorPiece(facing.getAxisAlignedAABB32(padding, size), facing)
             faces[facing] = piece
             parts.add(piece)
         }
@@ -56,6 +43,10 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
     }
 
     override fun onPartActivated(player: EntityPlayer, hand: EnumHand, part: IBlockPart, hitBox: IBlockPartHitBox): Boolean {
+        if (part is ConnectorPiece) {
+            part.setConnection(FluidConnector(part.facing))
+            this.world.markBlockRangeForRenderUpdate(this.pos, this.pos)
+        }
         return true
     }
 

@@ -15,7 +15,6 @@ import net.minecraftforge.fml.common.registry.GameRegistry
 import net.minecraftforge.registries.IForgeRegistry
 import net.ndrei.inventoryflow.InventoryFlowMod
 import net.ndrei.inventoryflow.MOD_ID
-import net.ndrei.teslacorelib.blocks.AxisAlignedBlock
 import net.ndrei.teslacorelib.blocks.MultiPartBlock
 
 abstract class BaseTileEntityBlock<T: TileEntity>(registryName: String, private val teClass: Class<T>)
@@ -24,7 +23,7 @@ abstract class BaseTileEntityBlock<T: TileEntity>(registryName: String, private 
     //#region BLOCK STATE & TILE ENTITY
 
     override fun createBlockState(): BlockStateContainer {
-        return ExtendedBlockState(this, arrayOf(AxisAlignedBlock.FACING), arrayOf(CONTAINED_TE))
+        return ExtendedBlockState(this, arrayOf(), arrayOf(CONTAINED_TE))
     }
 
     override fun getExtendedState(state: IBlockState, world: IBlockAccess, pos: BlockPos): IBlockState {

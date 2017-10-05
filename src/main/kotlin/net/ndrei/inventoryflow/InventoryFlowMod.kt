@@ -10,7 +10,6 @@ import net.minecraftforge.fml.common.event.FMLConstructionEvent
 import net.minecraftforge.fml.common.event.FMLInitializationEvent
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent
-import net.ndrei.teslacorelib.BaseProxy
 import net.ndrei.teslacorelib.config.ModConfigHandler
 import net.ndrei.teslacorelib.config.TeslaCoreLibConfig
 import net.ndrei.teslacorelib.items.gears.CoreGearType
@@ -23,7 +22,7 @@ import org.apache.logging.log4j.Logger
         useMetadata = true, modLanguage = "kotlin", modLanguageAdapter = "net.shadowfacts.forgelin.KotlinAdapter")
 object InventoryFlowMod {
     @SidedProxy(clientSide = "net.ndrei.inventoryflow.ClientProxy", serverSide = "net.ndrei.inventoryflow.ServerProxy")
-    lateinit var proxy: BaseProxy
+    lateinit var proxy: CommonProxy
     lateinit var logger: Logger
 
     lateinit var config: ModConfigHandler

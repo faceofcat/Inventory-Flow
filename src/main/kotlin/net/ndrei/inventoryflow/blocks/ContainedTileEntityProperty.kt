@@ -1,7 +1,6 @@
 package net.ndrei.inventoryflow.blocks
 
 import net.minecraft.tileentity.TileEntity
-import net.minecraft.tileentity.TileEntityNote
 import net.minecraftforge.common.property.IUnlistedProperty
 
 class ContainedTileEntityProperty(private val propName: String) : IUnlistedProperty<TileEntity> {
