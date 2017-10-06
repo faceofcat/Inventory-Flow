@@ -35,4 +35,9 @@ object ConnectorBlock: BaseTileEntityBlock<ConnectorTile>("connector_host", Conn
 
         return result
     }
+
+    override fun isTranslucent(state: IBlockState?) = true
+    override fun getAmbientOcclusionLightValue(state: IBlockState?) = 1.0f
+
+    override fun getBlockLayer() = BlockRenderLayer.TRANSLUCENT
 }

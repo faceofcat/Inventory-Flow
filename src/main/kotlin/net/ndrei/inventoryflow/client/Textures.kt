@@ -11,11 +11,14 @@ import net.ndrei.inventoryflow.MOD_ID
 import net.ndrei.teslacorelib.annotations.InitializeDuringConstruction
 
 enum class Textures(path: String) {
+    PIPE("blocks/pipe"),
     FLUID_CONNECTOR("blocks/fluid_connector");
 
     val resource = ResourceLocation(MOD_ID, path)
 
-    fun getSprite() = Minecraft.getMinecraft().textureMapBlocks.getTextureExtry(this.resource.toString())
+    fun getSprite() =
+        Minecraft.getMinecraft().textureMapBlocks.getTextureExtry(this.resource.toString())
+            ?: Minecraft.getMinecraft().textureMapBlocks.missingSprite
 }
 
 @InitializeDuringConstruction
