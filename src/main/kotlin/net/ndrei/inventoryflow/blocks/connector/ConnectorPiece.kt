@@ -40,6 +40,7 @@ class ConnectorPiece(aabb: AxisAlignedBB, val facing: EnumFacing, private val ti
             return (this.storedConnector != null)
         }
 
+
         return true
     }
 

@@ -7,6 +7,8 @@ import net.minecraft.client.renderer.vertex.VertexFormat
 import net.minecraft.item.ItemStack
 import net.minecraft.util.BlockRenderLayer
 import net.minecraft.util.EnumFacing
+import net.minecraft.util.math.BlockPos
+import net.minecraft.world.IBlockAccess
 import net.minecraftforge.common.model.TRSRTransformation
 import net.minecraftforge.common.property.IExtendedBlockState
 import net.ndrei.inventoryflow.InventoryFlowMod
@@ -62,6 +64,8 @@ object ConnectorBlock: BaseTileEntityBlock<ConnectorTile>("connector_host", Conn
     override fun isFullCube(state: IBlockState?) = false
     override fun isFullBlock(state: IBlockState?) = false
     override fun isOpaqueCube(state: IBlockState?) = false
+
+    override fun getLightValue(state: IBlockState?, world: IBlockAccess?, pos: BlockPos?) = 0
 
     override fun getBlockLayer() = BlockRenderLayer.TRANSLUCENT
 }
