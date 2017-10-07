@@ -13,6 +13,7 @@ import net.minecraft.util.math.Vec3d
 import net.minecraftforge.common.model.TRSRTransformation
 import net.ndrei.inventoryflow.client.Textures
 import net.ndrei.inventoryflow.connectors.ConnectorBlockPart
+import net.ndrei.inventoryflow.connectors.ConnectorSide
 import net.ndrei.inventoryflow.connectors.FluidConnector
 import net.ndrei.inventoryflow.connectors.IFlowConnectorPart
 import net.ndrei.teslacorelib.blocks.multipart.BlockPartHitBox
@@ -29,13 +30,13 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
         val parts = mutableListOf<IFlowConnectorPart>()
         val faces = mutableMapOf<EnumFacing, ConnectorPiece>()
 
-        parts.add(CenterPart())
+        parts.add(CenterPart(this))
 
         val padding = 8.0
         val size = 3.0
 
         EnumFacing.VALUES.forEach { facing ->
-            val piece = ConnectorPiece(facing.getAxisAlignedAABB32(padding, size), facing)
+            val piece = ConnectorPiece(facing.getAxisAlignedAABB32(padding, size), facing, this)
             faces[facing] = piece
             parts.add(piece)
         }
@@ -56,7 +57,19 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
 
     fun getConnectorParts() = this.parts.toList()
 
-    class CenterPart: ConnectorBlockPart() {
+    fun getConnectedSides() =
+        EnumFacing.VALUES.filter {
+            val target = this.pos.offset(it)
+            (this.faces[it]?.hasConnection == true)
+                || (this.world.isBlockLoaded(target) && (this.world.getBlockState(target).block == this.getBlockType()))
+        }
+
+    fun isConnectedPipe(side: EnumFacing) =
+        this.pos.offset(side).let {
+            (this.world.isBlockLoaded(it) && (this.world.getBlockState(it).block == this.getBlockType()))
+        }
+
+    class CenterPart(private val tile: ConnectorTile): ConnectorBlockPart(ConnectorSide.CENTER) {
         init {
             this.boxes.add(BlockPartHitBox.big16Sized(
                 4.0, 4.0, 4.0,
@@ -64,56 +77,104 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
             ))
         }
 
+        override val bakingKey: String
+            get() = super.bakingKey + ":" + this.tile.getConnectedSides().joinToString(":") { it.ordinal.toString() }
+
         override fun getBakery(): IBakery = object: IBakery {
             override fun getQuads(state: IBlockState?, stack: ItemStack?, side: EnumFacing?, vertexFormat: VertexFormat, transform: TRSRTransformation): MutableList<BakedQuad> {
                 val quads = mutableListOf<BakedQuad>()
-
-//                EnumFacing.VALUES.fold(RawCube(
-//                    this@CenterPart.boxes[0].aabb.min.scale(32.0),
-//                    this@CenterPart.boxes[0].aabb.max.scale(32.0),
-//                    Textures.PIPE.getSprite())
-//                    .autoUV()
-//                ) { cube, it ->
-//                    cube.addFace(it)
-//                }.bake(quads, vertexFormat, transform)
 
                 val from = this@CenterPart.boxes[0].aabb.min.scale(32.0)
                 val to = this@CenterPart.boxes[0].aabb.max.scale(32.0)
                 val chamfer = 3.0
 
-                // X Axis
-                RawCube(
-                    Vec3d(from.x, from.y + chamfer, from.z + chamfer),
-                    Vec3d(to.x, to.y - chamfer, to.z - chamfer),
-                    Textures.PIPE.getSprite()
-                ).autoUV().dualSide()
-                    .addFace(EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X))
-                    .addFace(EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X))
-                    .bake(quads, vertexFormat, transform)
+                val connected = this@CenterPart.tile.getConnectedSides()
 
-                // Z AXIS
-                RawCube(
-                    Vec3d(from.x + chamfer, from.y + chamfer, from.z),
-                    Vec3d(to.x - chamfer, to.y - chamfer, to.z),
-                    Textures.PIPE.getSprite()
-                ).autoUV().dualSide()
-                    .addFace(EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.Z))
-                    .addFace(EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.Z))
-                    .bake(quads, vertexFormat, transform)
+                // val connectedAxes = connected.groupBy { it.axis }
+                fun hasConnection(vararg face: EnumFacing) =
+                    face.all { connected.contains(it) }
 
-                // Y AXIS
-                RawCube(
-                    Vec3d(from.x + chamfer, from.y, from.z + chamfer),
-                    Vec3d(to.x - chamfer, to.y, to.z - chamfer),
-                    Textures.PIPE.getSprite()
-                ).autoUV().dualSide()
-                    .addFace(EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.Y))
-                    .addFace(EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.Y))
-                    .bake(quads, vertexFormat, transform)
+                fun hasOnlyConnection(vararg face: EnumFacing) =
+                    (face.size == connected.size) && hasConnection(*face)
+
+                val hasOnlyOneConnection = connected.size == 1
+
+                fun hasConnectionOrReverse(vararg face: EnumFacing) =
+                    hasConnection(*face) || hasConnection(*face.map { it.opposite }.toTypedArray())
+
+                // FLAT FACES
+                var straightPipe: EnumFacing.Axis? = null
+                EnumFacing.Axis.values().any {
+                    val first = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, it)
+                    val second = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, it)
+                    val straight = hasOnlyConnection(first, second)
+                        && this@CenterPart.tile.isConnectedPipe(first)
+                        && this@CenterPart.tile.isConnectedPipe(second)
+                    if (straight) {
+                        straightPipe = it
+                        return@any true
+                    }
+                    return@any false
+                }
+                if (straightPipe != null) {
+                    val cube = RawCube(
+                        when (straightPipe!!) {
+                            EnumFacing.Axis.X -> Vec3d(from.x, from.y + chamfer, from.z + chamfer)
+                            EnumFacing.Axis.Y -> Vec3d(from.x + chamfer, from.y, from.z + chamfer)
+                            EnumFacing.Axis.Z -> Vec3d(from.x + chamfer, from.y + chamfer, from.z)
+                        },
+                        when (straightPipe!!) {
+                            EnumFacing.Axis.X -> Vec3d(to.x, to.y - chamfer, to.z - chamfer)
+                            EnumFacing.Axis.Y -> Vec3d(to.x - chamfer, to.y, to.z - chamfer)
+                            EnumFacing.Axis.Z -> Vec3d(to.x - chamfer, to.y - chamfer, to.z)
+                        },
+                        Textures.PIPE.getSprite()
+                    ).autoUV().dualSide()
+
+                    val facing = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, straightPipe!!)
+                    val base = if ((facing == EnumFacing.UP) || (facing == EnumFacing.DOWN)) EnumFacing.NORTH else facing.rotateY()
+                    (0..3).fold(base) { face, _ ->
+                        cube.addFace(face)
+                        face.rotateAround(straightPipe!!)
+                    }
+
+                    cube.bake(quads, vertexFormat, transform)
+                }
+                else {
+                    // big ball thingy
+                    EnumFacing.Axis.values().forEach {
+                        val nOffset = 0.0
+                        val pOffset = 0.0
+
+                        val cube = RawCube(
+                            when (it) {
+                                EnumFacing.Axis.X -> Vec3d(from.x + nOffset, from.y + chamfer, from.z + chamfer)
+                                EnumFacing.Axis.Y -> Vec3d(from.x + chamfer, from.y + nOffset, from.z + chamfer)
+                                EnumFacing.Axis.Z -> Vec3d(from.x + chamfer, from.y + chamfer, from.z + nOffset)
+                            },
+                            when (it) {
+                                EnumFacing.Axis.X -> Vec3d(to.x - pOffset, to.y - chamfer, to.z - chamfer)
+                                EnumFacing.Axis.Y -> Vec3d(to.x - chamfer, to.y - pOffset, to.z - chamfer)
+                                EnumFacing.Axis.Z -> Vec3d(to.x - chamfer, to.y - chamfer, to.z - pOffset)
+                            },
+                            Textures.PIPE.getSprite()
+                        ).autoUV().dualSide()
+
+                        EnumFacing.AxisDirection.values().forEach { direction ->
+                            val facing = EnumFacing.getFacingFromAxis(direction, it)
+                            if (!connected.contains(facing))
+                                cube.addFace(facing)
+                        }
+
+                        cube.bake(quads, vertexFormat, transform)
+                    }
+                }
 
                 // THE LUMP
-                RawLump()
-                    .addFace(arrayOf( // Up / Front
+                val lump = RawLump()
+
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.WEST, EnumFacing.UP) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Up / Front
                         Vec3d(from.x, to.y - chamfer, from.z + chamfer),
                         Vec3d(from.x + chamfer, to.y, from.z + chamfer),
                         Vec3d(from.x + chamfer, to.y, to.z - chamfer),
@@ -123,11 +184,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.WEST, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Up / Back
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.EAST, EnumFacing.UP) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Up / Back
                         Vec3d(to.x, to.y - chamfer, from.z + chamfer),
                         Vec3d(to.x - chamfer, to.y, from.z + chamfer),
                         Vec3d(to.x - chamfer, to.y, to.z - chamfer),
@@ -137,11 +198,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.EAST, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Down / Front
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.WEST, EnumFacing.DOWN) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Down / Front
                         Vec3d(from.x, from.y + chamfer, from.z + chamfer),
                         Vec3d(from.x + chamfer, from.y, from.z + chamfer),
                         Vec3d(from.x + chamfer, from.y, to.z - chamfer),
@@ -151,11 +212,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.WEST, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Down / Back
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.EAST, EnumFacing.DOWN) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Down / Back
                         Vec3d(to.x, from.y + chamfer, from.z + chamfer),
                         Vec3d(to.x - chamfer, from.y, from.z + chamfer),
                         Vec3d(to.x - chamfer, from.y, to.z - chamfer),
@@ -165,11 +226,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.EAST, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Down / Left
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.SOUTH, EnumFacing.UP) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Up / Left
                         Vec3d(from.x + chamfer, to.y - chamfer, from.z),
                         Vec3d(from.x + chamfer, to.y, from.z + chamfer),
                         Vec3d(to.x - chamfer, to.y, from.z + chamfer),
@@ -179,11 +240,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.Z),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.SOUTH, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Up / Right
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.NORTH, EnumFacing.UP) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Up / Right
                         Vec3d(from.x + chamfer, to.y - chamfer, to.z),
                         Vec3d(from.x + chamfer, to.y, to.z - chamfer),
                         Vec3d(to.x - chamfer, to.y, to.z - chamfer),
@@ -193,11 +254,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.Z),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.NORTH, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Down / Left
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.SOUTH, EnumFacing.DOWN) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Down / Left
                         Vec3d(from.x + chamfer, from.y + chamfer, from.z),
                         Vec3d(from.x + chamfer, from.y, from.z + chamfer),
                         Vec3d(to.x - chamfer, from.y, from.z + chamfer),
@@ -207,11 +268,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.Z),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.SOUTH, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Down / Right
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.NORTH, EnumFacing.DOWN) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Down / Right
                         Vec3d(from.x + chamfer, from.y + chamfer, to.z),
                         Vec3d(from.x + chamfer, from.y, to.z - chamfer),
                         Vec3d(to.x - chamfer, from.y, to.z - chamfer),
@@ -221,11 +282,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.Z),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.NORTH, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Front / Left
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.SOUTH, EnumFacing.WEST) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Front / Left
                         Vec3d(from.x, to.y - chamfer, from.z + chamfer),
                         Vec3d(from.x + chamfer, to.y - chamfer, from.z),
                         Vec3d(from.x + chamfer, from.y + chamfer, from.z),
@@ -235,11 +296,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.WEST, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Front / Right
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.NORTH, EnumFacing.WEST) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Front / Right
                         Vec3d(to.x, to.y - chamfer, from.z + chamfer),
                         Vec3d(to.x - chamfer, to.y - chamfer, from.z),
                         Vec3d(to.x - chamfer, from.y + chamfer, from.z),
@@ -249,11 +310,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.WEST, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Back / Left
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.SOUTH, EnumFacing.EAST) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Back / Left
                         Vec3d(from.x, to.y - chamfer, to.z - chamfer),
                         Vec3d(from.x + chamfer, to.y - chamfer, to.z),
                         Vec3d(from.x + chamfer, from.y + chamfer, to.z),
@@ -263,11 +324,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.EAST, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Back / Right
+                if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.NORTH, EnumFacing.EAST) || hasOnlyOneConnection) {
+                    lump.addFace(arrayOf( // Back / Right
                         Vec3d(to.x, to.y - chamfer, to.z - chamfer),
                         Vec3d(to.x - chamfer, to.y - chamfer, to.z),
                         Vec3d(to.x - chamfer, from.y + chamfer, to.z),
@@ -277,11 +338,11 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         Vec2f(5.5f, 4.0f),
                         Vec2f(10.5f, 4.0f),
                         Vec2f(10.5f, 6.0f)
-                    ), Textures.PIPE.getSprite(),
-                        EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X),
-                        bothSides = true)
+                    ), Textures.PIPE.getSprite(), EnumFacing.EAST, bothSides = true)
+                }
 
-                    .addFace(arrayOf( // Front / Left / Up
+                if (straightPipe == null) {
+                    lump.addFace(arrayOf( // Front / Left / Up
                         Vec3d(from.x, to.y - chamfer, from.z + chamfer),
                         Vec3d(from.x + chamfer, to.y, from.z + chamfer),
                         Vec3d(from.x + chamfer, to.y - chamfer, from.z)
@@ -294,7 +355,7 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X),
                         bothSides = true)
 
-                    .addFace(arrayOf( // Front / Left / Down
+                    lump.addFace(arrayOf( // Front / Left / Down
                         Vec3d(from.x, from.y + chamfer, from.z + chamfer),
                         Vec3d(from.x + chamfer, from.y, from.z + chamfer),
                         Vec3d(from.x + chamfer, from.y + chamfer, from.z)
@@ -307,7 +368,7 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X),
                         bothSides = true)
 
-                    .addFace(arrayOf( // Front / Right / Up
+                    lump.addFace(arrayOf( // Front / Right / Up
                         Vec3d(to.x, to.y - chamfer, from.z + chamfer),
                         Vec3d(to.x - chamfer, to.y, from.z + chamfer),
                         Vec3d(to.x - chamfer, to.y - chamfer, from.z)
@@ -320,7 +381,7 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X),
                         bothSides = true)
 
-                    .addFace(arrayOf( // Front / Right / Down
+                    lump.addFace(arrayOf( // Front / Right / Down
                         Vec3d(to.x, from.y + chamfer, from.z + chamfer),
                         Vec3d(to.x - chamfer, from.y, from.z + chamfer),
                         Vec3d(to.x - chamfer, from.y + chamfer, from.z)
@@ -332,8 +393,8 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                     ), Textures.PIPE.getSprite(),
                         EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, EnumFacing.Axis.X),
                         bothSides = true)
-                    
-                    .addFace(arrayOf( // Back / Left / Up
+
+                    lump.addFace(arrayOf( // Back / Left / Up
                         Vec3d(from.x, to.y - chamfer, to.z - chamfer),
                         Vec3d(from.x + chamfer, to.y, to.z - chamfer),
                         Vec3d(from.x + chamfer, to.y - chamfer, to.z)
@@ -346,7 +407,7 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X),
                         bothSides = true)
 
-                    .addFace(arrayOf( // Back / Left / Down
+                    lump.addFace(arrayOf( // Back / Left / Down
                         Vec3d(from.x, from.y + chamfer, to.z - chamfer),
                         Vec3d(from.x + chamfer, from.y, to.z - chamfer),
                         Vec3d(from.x + chamfer, from.y + chamfer, to.z)
@@ -359,7 +420,7 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X),
                         bothSides = true)
 
-                    .addFace(arrayOf( // Back / Right / Up
+                    lump.addFace(arrayOf( // Back / Right / Up
                         Vec3d(to.x, to.y - chamfer, to.z - chamfer),
                         Vec3d(to.x - chamfer, to.y, to.z - chamfer),
                         Vec3d(to.x - chamfer, to.y - chamfer, to.z)
@@ -372,7 +433,7 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                         EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X),
                         bothSides = true)
 
-                    .addFace(arrayOf( // Back / Right / Down
+                    lump.addFace(arrayOf( // Back / Right / Down
                         Vec3d(to.x, from.y + chamfer, to.z - chamfer),
                         Vec3d(to.x - chamfer, from.y, to.z - chamfer),
                         Vec3d(to.x - chamfer, from.y + chamfer, to.z)
@@ -384,8 +445,9 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                     ), Textures.PIPE.getSprite(),
                         EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, EnumFacing.Axis.X),
                         bothSides = true)
+                }
 
-                    .bake(quads, vertexFormat, transform)
+                lump.bake(quads, vertexFormat, transform)
 
                 return quads
             }

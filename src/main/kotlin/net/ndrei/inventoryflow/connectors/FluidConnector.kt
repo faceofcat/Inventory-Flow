@@ -10,7 +10,7 @@ import net.ndrei.inventoryflow.client.Textures
 import net.ndrei.teslacorelib.blocks.multipart.BlockPartHitBox
 import net.ndrei.teslacorelib.render.selfrendering.*
 
-class FluidConnector(private val facing: EnumFacing): ConnectorBlockPart() {
+class FluidConnector(private val facing: EnumFacing): ConnectorBlockPart(ConnectorSide.fromFacing(facing)) {
     init {
         this.boxes.add(BlockPartHitBox(this.facing.getAxisAlignedAABB32(10.0, 2.0)))
         this.boxes.add(BlockPartHitBox(this.facing.getAxisAlignedAABB32(14.0, 4.0, 2.0)))

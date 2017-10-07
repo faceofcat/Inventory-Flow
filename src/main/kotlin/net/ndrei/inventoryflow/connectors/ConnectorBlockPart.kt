@@ -4,7 +4,7 @@ import net.minecraft.nbt.NBTTagCompound
 import net.minecraftforge.common.util.INBTSerializable
 import net.ndrei.teslacorelib.blocks.multipart.BlockPart
 
-abstract class ConnectorBlockPart : BlockPart(), IFlowConnectorPart, INBTSerializable<NBTTagCompound> {
+abstract class ConnectorBlockPart(val side: ConnectorSide) : BlockPart(), IFlowConnectorPart, INBTSerializable<NBTTagCompound> {
     //#region serialization
 
     override fun serializeNBT(): NBTTagCompound {
@@ -15,4 +15,7 @@ abstract class ConnectorBlockPart : BlockPart(), IFlowConnectorPart, INBTSeriali
     }
 
     //#endregion
+
+    override val bakingKey: String
+        get() = "${this.side.name}::${this.javaClass.name}"
 }

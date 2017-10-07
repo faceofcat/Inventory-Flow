@@ -5,4 +5,5 @@ import net.ndrei.teslacorelib.render.selfrendering.IBakery
 
 interface IFlowConnectorPart : IBlockPart {
     fun getBakery(): IBakery
+    val bakingKey: String
 }
