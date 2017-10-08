@@ -1,6 +1,7 @@
 package net.ndrei.inventoryflow.blocks.connector
 
 import net.minecraft.block.state.IBlockState
+import net.minecraft.client.renderer.BufferBuilder
 import net.minecraft.client.renderer.block.model.BakedQuad
 import net.minecraft.client.renderer.vertex.VertexFormat
 import net.minecraft.entity.player.EntityPlayer
@@ -12,8 +13,8 @@ import net.minecraft.util.math.Vec2f
 import net.minecraft.util.math.Vec3d
 import net.minecraftforge.common.model.TRSRTransformation
 import net.ndrei.inventoryflow.client.Textures
+import net.ndrei.inventoryflow.common.ConnectorSide
 import net.ndrei.inventoryflow.connectors.ConnectorBlockPart
-import net.ndrei.inventoryflow.connectors.ConnectorSide
 import net.ndrei.inventoryflow.connectors.FluidConnector
 import net.ndrei.inventoryflow.connectors.IFlowConnectorPart
 import net.ndrei.teslacorelib.blocks.multipart.BlockPartHitBox
@@ -117,28 +118,38 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                     return@any false
                 }
                 if (straightPipe != null) {
-                    val cube = RawCube(
-                        when (straightPipe!!) {
-                            EnumFacing.Axis.X -> Vec3d(from.x, from.y + chamfer, from.z + chamfer)
-                            EnumFacing.Axis.Y -> Vec3d(from.x + chamfer, from.y, from.z + chamfer)
-                            EnumFacing.Axis.Z -> Vec3d(from.x + chamfer, from.y + chamfer, from.z)
-                        },
-                        when (straightPipe!!) {
-                            EnumFacing.Axis.X -> Vec3d(to.x, to.y - chamfer, to.z - chamfer)
-                            EnumFacing.Axis.Y -> Vec3d(to.x - chamfer, to.y, to.z - chamfer)
-                            EnumFacing.Axis.Z -> Vec3d(to.x - chamfer, to.y - chamfer, to.z)
-                        },
-                        Textures.PIPE.getSprite()
-                    ).autoUV().dualSide()
-
-                    val facing = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, straightPipe!!)
-                    val base = if ((facing == EnumFacing.UP) || (facing == EnumFacing.DOWN)) EnumFacing.NORTH else facing.rotateY()
-                    (0..3).fold(base) { face, _ ->
-                        cube.addFace(face)
-                        face.rotateAround(straightPipe!!)
+//                    val cube = RawCube(
+//                        when (straightPipe!!) {
+//                            EnumFacing.Axis.X -> Vec3d(from.x, from.y + chamfer, from.z + chamfer)
+//                            EnumFacing.Axis.Y -> Vec3d(from.x + chamfer, from.y, from.z + chamfer)
+//                            EnumFacing.Axis.Z -> Vec3d(from.x + chamfer, from.y + chamfer, from.z)
+//                        },
+//                        when (straightPipe!!) {
+//                            EnumFacing.Axis.X -> Vec3d(to.x, to.y - chamfer, to.z - chamfer)
+//                            EnumFacing.Axis.Y -> Vec3d(to.x - chamfer, to.y, to.z - chamfer)
+//                            EnumFacing.Axis.Z -> Vec3d(to.x - chamfer, to.y - chamfer, to.z)
+//                        },
+//                        Textures.PIPE.getSprite()
+//                    ).autoUV().dualSide()
+//
+//                    val facing = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, straightPipe!!)
+//                    val base = if ((facing == EnumFacing.UP) || (facing == EnumFacing.DOWN)) EnumFacing.NORTH else facing.rotateY()
+//                    (0..3).fold(base) { face, _ ->
+//                        cube.addFace(face)
+//                        face.rotateAround(straightPipe!!)
+//                    }
+//
+//                    cube.bake(quads, vertexFormat, transform)
+                    when (straightPipe!!) {
+                        EnumFacing.Axis.X ->
+                            Vec3d(from.x, from.y + chamfer, from.z + chamfer) to Vec3d(to.x, to.y - chamfer, to.z - chamfer)
+                        EnumFacing.Axis.Y ->
+                            Vec3d(from.x + chamfer, from.y, from.z + chamfer) to Vec3d(to.x - chamfer, to.y, to.z - chamfer)
+                        EnumFacing.Axis.Z ->
+                            Vec3d(from.x + chamfer, from.y + chamfer, from.z) to Vec3d(to.x - chamfer, to.y - chamfer, to.z)
                     }
-
-                    cube.bake(quads, vertexFormat, transform)
+                        .chamfers(straightPipe!!, 1.5, .5f, Textures.PIPE_SOLID.getSprite())
+                        .forEach { it.bake(quads, vertexFormat, transform) }
                 }
                 else {
                     // big ball thingy
@@ -172,6 +183,8 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
 
                 // THE LUMP
                 val lump = RawLump()
+
+                straightPipe = EnumFacing.Axis.X // TODO: remove this to re-enable the lump
 
                 if (straightPipe == null) { // hasConnectionOrReverse(EnumFacing.WEST, EnumFacing.UP) || hasOnlyOneConnection) {
                     lump.addFace(arrayOf( // Up / Front
@@ -452,5 +465,60 @@ class ConnectorTile : TileEntity(), IBlockPartProvider {
                 return quads
             }
         }.static()
+
+        override fun draw(buffer: BufferBuilder) {
+            val quads = mutableListOf<BakedQuad>()
+
+            val from = this@CenterPart.boxes[0].aabb.min.scale(32.0)
+            val to = this@CenterPart.boxes[0].aabb.max.scale(32.0)
+            val chamfer = 3.5
+
+            val connected = this@CenterPart.tile.getConnectedSides()
+
+            fun hasConnection(vararg face: EnumFacing) =
+                face.all { connected.contains(it) }
+
+            fun hasOnlyConnection(vararg face: EnumFacing) =
+                (face.size == connected.size) && hasConnection(*face)
+
+            // FLAT FACES
+            var straightPipe: EnumFacing.Axis? = null
+            EnumFacing.Axis.values().any {
+                val first = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, it)
+                val second = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.POSITIVE, it)
+                val straight = hasOnlyConnection(first, second)
+                    && this@CenterPart.tile.isConnectedPipe(first)
+                    && this@CenterPart.tile.isConnectedPipe(second)
+                if (straight) {
+                    straightPipe = it
+                    return@any true
+                }
+                return@any false
+            }
+            if (straightPipe != null) {
+                val cube = RawCube(
+                    when (straightPipe!!) {
+                        EnumFacing.Axis.X -> Vec3d(from.x, from.y + chamfer, from.z + chamfer)
+                        EnumFacing.Axis.Y -> Vec3d(from.x + chamfer, from.y, from.z + chamfer)
+                        EnumFacing.Axis.Z -> Vec3d(from.x + chamfer, from.y + chamfer, from.z)
+                    },
+                    when (straightPipe!!) {
+                        EnumFacing.Axis.X -> Vec3d(to.x, to.y - chamfer, to.z - chamfer)
+                        EnumFacing.Axis.Y -> Vec3d(to.x - chamfer, to.y, to.z - chamfer)
+                        EnumFacing.Axis.Z -> Vec3d(to.x - chamfer, to.y - chamfer, to.z)
+                    },
+                    Textures.PIPE_TRANSPARENT.getSprite()
+                ).autoUV().dualSide()
+
+                val facing = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, straightPipe!!)
+                val base = if ((facing == EnumFacing.UP) || (facing == EnumFacing.DOWN)) EnumFacing.NORTH else facing.rotateY()
+                (0..3).fold(base) { face, _ ->
+                    cube.addFace(face)
+                    face.rotateAround(straightPipe!!)
+                }
+
+                cube.draw(buffer)
+            }
+        }
     }
 }

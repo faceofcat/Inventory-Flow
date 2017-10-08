@@ -2,9 +2,16 @@ package net.ndrei.inventoryflow.blocks.connector
 
 import com.google.common.cache.CacheBuilder
 import net.minecraft.block.state.IBlockState
+import net.minecraft.client.Minecraft
+import net.minecraft.client.renderer.GlStateManager
+import net.minecraft.client.renderer.RenderHelper
+import net.minecraft.client.renderer.Tessellator
 import net.minecraft.client.renderer.block.model.BakedQuad
+import net.minecraft.client.renderer.texture.TextureMap
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats
 import net.minecraft.client.renderer.vertex.VertexFormat
 import net.minecraft.item.ItemStack
+import net.minecraft.tileentity.TileEntity
 import net.minecraft.util.BlockRenderLayer
 import net.minecraft.util.EnumFacing
 import net.minecraft.util.math.BlockPos
@@ -17,6 +24,9 @@ import net.ndrei.teslacorelib.annotations.AutoRegisterBlock
 import net.ndrei.teslacorelib.render.selfrendering.IBakery
 import net.ndrei.teslacorelib.render.selfrendering.ISelfRenderingBlock
 import net.ndrei.teslacorelib.render.selfrendering.SelfRenderingBlock
+import net.ndrei.teslacorelib.render.selfrendering.TESRProxy
+import net.ndrei.teslapoweredthingies.render.bakery.SelfRenderingTESR
+import org.lwjgl.opengl.GL11
 import java.util.concurrent.TimeUnit
 
 @AutoRegisterBlock
@@ -56,6 +66,41 @@ object ConnectorBlock: BaseTileEntityBlock<ConnectorTile>("connector_host", Conn
         return result
     }
 
+    override fun renderTESR(proxy: TESRProxy, te: TileEntity, x: Double, y: Double, z: Double, partialTicks: Float, destroyStage: Int, alpha: Float) {
+        val tessellator = Tessellator.getInstance()
+        val buffer = tessellator.buffer
+        proxy.bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE)
+        RenderHelper.disableStandardItemLighting()
+        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA)
+        GlStateManager.enableBlend()
+//        GlStateManager.disableCull()
+        GlStateManager.depthMask(false)
+
+        if (Minecraft.isAmbientOcclusionEnabled()) {
+            GlStateManager.shadeModel(GL11.GL_SMOOTH)
+        } else {
+            GlStateManager.shadeModel(GL11.GL_FLAT)
+        }
+
+        buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX_COLOR)
+
+        val tile = te as? ConnectorTile
+        tile?.getConnectorParts()?.forEach {
+            it.draw(buffer)
+        }
+
+        buffer.setTranslation(0.0, 0.0, 0.0)
+        tessellator.draw()
+
+        GlStateManager.depthMask(true)
+        RenderHelper.enableStandardItemLighting()
+    }
+
+    override fun registerRenderer() {
+        super.registerRenderer()
+        SelfRenderingTESR.registerFor(this.teClass)
+    }
+
     override fun isTranslucent(state: IBlockState?) = true
     override fun getAmbientOcclusionLightValue(state: IBlockState?) = 1.0f
 
@@ -67,5 +112,5 @@ object ConnectorBlock: BaseTileEntityBlock<ConnectorTile>("connector_host", Conn
 
     override fun getLightValue(state: IBlockState?, world: IBlockAccess?, pos: BlockPos?) = 0
 
-    override fun getBlockLayer() = BlockRenderLayer.TRANSLUCENT
+    override fun getBlockLayer() = BlockRenderLayer.SOLID
 }

@@ -17,7 +17,7 @@ import net.ndrei.inventoryflow.InventoryFlowMod
 import net.ndrei.inventoryflow.MOD_ID
 import net.ndrei.teslacorelib.blocks.MultiPartBlock
 
-abstract class BaseTileEntityBlock<T: TileEntity>(registryName: String, private val teClass: Class<T>)
+abstract class BaseTileEntityBlock<T: TileEntity>(registryName: String, protected val teClass: Class<T>)
     : MultiPartBlock(MOD_ID, InventoryFlowMod.creativeTab, registryName, Material.ROCK), ITileEntityProvider {
 
     //#region BLOCK STATE & TILE ENTITY

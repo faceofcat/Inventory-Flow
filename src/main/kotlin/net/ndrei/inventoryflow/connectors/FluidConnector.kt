@@ -7,6 +7,7 @@ import net.minecraft.item.ItemStack
 import net.minecraft.util.EnumFacing
 import net.minecraftforge.common.model.TRSRTransformation
 import net.ndrei.inventoryflow.client.Textures
+import net.ndrei.inventoryflow.common.ConnectorSide
 import net.ndrei.teslacorelib.blocks.multipart.BlockPartHitBox
 import net.ndrei.teslacorelib.render.selfrendering.*
 

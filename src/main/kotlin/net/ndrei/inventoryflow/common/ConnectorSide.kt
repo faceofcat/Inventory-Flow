@@ -1,4 +1,4 @@
-package net.ndrei.inventoryflow.connectors
+package net.ndrei.inventoryflow.common
 
 import net.minecraft.util.EnumFacing
 
@@ -14,12 +14,12 @@ enum class ConnectorSide(val facing: EnumFacing?) {
     companion object {
         fun fromFacing(facing: EnumFacing?) =
             when (facing) {
-                EnumFacing.NORTH -> ConnectorSide.NORTH
-                EnumFacing.EAST -> ConnectorSide.EAST
-                EnumFacing.SOUTH -> ConnectorSide.SOUTH
-                EnumFacing.WEST -> ConnectorSide.WEST
-                EnumFacing.UP -> ConnectorSide.UP
-                EnumFacing.DOWN -> ConnectorSide.DOWN
+                EnumFacing.NORTH -> NORTH
+                EnumFacing.EAST -> EAST
+                EnumFacing.SOUTH -> SOUTH
+                EnumFacing.WEST -> WEST
+                EnumFacing.UP -> UP
+                EnumFacing.DOWN -> DOWN
                 else -> CENTER
             }
     }

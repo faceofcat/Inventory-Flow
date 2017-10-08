@@ -12,6 +12,8 @@ import net.ndrei.teslacorelib.annotations.InitializeDuringConstruction
 
 enum class Textures(path: String) {
     PIPE("blocks/pipe"),
+    PIPE_SOLID("blocks/pipe_solid"),
+    PIPE_TRANSPARENT("blocks/pipe_transparent"),
     FLUID_CONNECTOR("blocks/fluid_connector");
 
     val resource = ResourceLocation(MOD_ID, path)
