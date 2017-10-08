@@ -42,7 +42,6 @@ class ConnectorPiece(aabb: AxisAlignedBB, val facing: EnumFacing, private val ti
             return (this.storedConnector != null)
         }
 
-
         return true
     }
 
@@ -85,20 +84,19 @@ class ConnectorPiece(aabb: AxisAlignedBB, val facing: EnumFacing, private val ti
 
             val cube = RawCube(
                 when (this.facing.axis) {
-                    EnumFacing.Axis.X -> Vec3d(from.x, from.y + chamfer, from.z + chamfer)
-                    EnumFacing.Axis.Y -> Vec3d(from.x + chamfer, from.y, from.z + chamfer)
-                    EnumFacing.Axis.Z -> Vec3d(from.x + chamfer, from.y + chamfer, from.z)
+                    EnumFacing.Axis.X -> Vec3d(from.x, 32 - from.y - chamfer, from.z + chamfer)
+                    EnumFacing.Axis.Y -> Vec3d(from.x + chamfer, 32 - from.y, from.z + chamfer)
+                    EnumFacing.Axis.Z -> Vec3d(from.x + chamfer, 32 - from.y - chamfer, from.z)
                 },
                 when (this.facing.axis) {
-                    EnumFacing.Axis.X -> Vec3d(to.x, to.y - chamfer, to.z - chamfer)
-                    EnumFacing.Axis.Y -> Vec3d(to.x - chamfer, to.y, to.z - chamfer)
-                    EnumFacing.Axis.Z -> Vec3d(to.x - chamfer, to.y - chamfer, to.z)
+                    EnumFacing.Axis.X -> Vec3d(to.x, 32 - to.y + chamfer, to.z - chamfer)
+                    EnumFacing.Axis.Y -> Vec3d(to.x - chamfer, 32 - to.y, to.z - chamfer)
+                    EnumFacing.Axis.Z -> Vec3d(to.x - chamfer, 32 - to.y + chamfer, to.z)
                 },
                 Textures.PIPE_TRANSPARENT.getSprite()
             ).autoUV().dualSide()
 
-            val facing = EnumFacing.getFacingFromAxis(EnumFacing.AxisDirection.NEGATIVE, this.facing.axis)
-            val base = if ((facing == EnumFacing.UP) || (facing == EnumFacing.DOWN)) EnumFacing.NORTH else facing.rotateY()
+            val base = if ((this.facing == EnumFacing.UP) || (this.facing == EnumFacing.DOWN)) EnumFacing.NORTH else this.facing.rotateY()
             (0..3).fold(base) { face, _ ->
                 cube.addFace(face)
                 face.rotateAround(this.facing.axis)
